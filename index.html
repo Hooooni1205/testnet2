@@ -21,20 +21,16 @@
 
   <!-- ★ 부모가 localStorage를 대행하고, 자식과 핸드셰이크로 자격 전달 -->
   <script>
-    window.addEventListener("message",(e)=>{
-      const d=e.data||{};
-      // (1) 자식이 “저장해!”라고 직접 요청하면 부모가 확실히 저장
-      if(d && d.__bridge==="persistCreds"){
-        try{
-          if(d.employeeId)   localStorage.setItem("employeeId", d.employeeId);
-          if(d.employeeName) localStorage.setItem("employeeName", d.employeeName);
-        }catch(_){}
-        // 저장 후 곧바로 다시 푸시(자식이 곧 새로고침되더라도 대비)
-        try{ e.source && e.source.postMessage({__bridge:"pushCreds", employeeId:localStorage.getItem("employeeId"), employeeName:localStorage.getItem("employeeName") },"*"); }catch(_){}
-      }
-      // (2) 로그아웃 시 부모 저장소도 정리
-      if(d && d.__bridge==="clearCreds"){
-        try{ localStorage.removeItem("employeeId"); localStorage.removeItem("employeeName"); }catch(_){}
+    window.addEventListener("message", (e)=>{
+      const d = e.data || {};
+      if (d && d.__bridge === "req") {
+        let value = null;
+        try {
+          if (d.op === "get")    value = localStorage.getItem(d.key);
+          if (d.op === "set")    localStorage.setItem(d.key, d.value);
+          if (d.op === "remove") localStorage.removeItem(d.key);
+        } catch (_) {}
+        e.source?.postMessage({ __bridge:"ok", id: d.id, value }, "*");
       }
     });
 
@@ -87,7 +83,7 @@
 
   <script>
     /* ★ Apps Script 웹앱 배포 URL로 바꾸세요 */
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxFcYsCXT8QF40YBgqAMUY4VVC4AWoLUO5OQAoXjssRBKFxkHefGJtMZG-qx-D18QFjg/exec";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRKMrPTKC2uK-Sb1D22nNIsUBSFWFpTJDtNrFhnIDY34bANfnj4Dg2sqj24OXcR4-mUw/exec";
 
     (function mount(){
       const stage = document.getElementById("stage");
