@@ -22,19 +22,46 @@
 
   <!-- ★★★ iOS용 Storage Bridge: 자식(앱스스크립트) 요청을 부모가 대신 localStorage에 저장/읽기 ★★★ -->
   <script>
-    window.addEventListener("message", (e) => {
-      const d = e.data || {};
-      if (d && d.__bridge === "req") {
-        let value = null;
-        try {
-          if (d.op === "get")    value = localStorage.getItem(d.key);
-          if (d.op === "set")    localStorage.setItem(d.key, d.value);
-          if (d.op === "remove") localStorage.removeItem(d.key);
-        } catch (_) {}
-        e.source && e.source.postMessage({ __bridge:"ok", id:d.id, value }, "*");
-      }
-    });
-  </script>
+  // 기존: 자식 요청(req)에 응답하는 리스너
+  window.addEventListener("message", (e) => {
+    const d = e.data || {};
+    if (d && d.__bridge === "req") {
+      let value = null;
+      try {
+        if (d.op === "get")    value = localStorage.getItem(d.key);
+        if (d.op === "set")    localStorage.setItem(d.key, d.value);
+        if (d.op === "remove") localStorage.removeItem(d.key);
+      } catch (_) {}
+      e.source && e.source.postMessage({ __bridge: "ok", id: d.id, value }, "*");
+    }
+  });
+
+  // ★ 추가: 부모가 먼저 자격을 푸시
+  function pushCreds(targetWindow) {
+    try {
+      const employeeId   = localStorage.getItem("employeeId");
+      const employeeName = localStorage.getItem("employeeName");
+      targetWindow && targetWindow.postMessage(
+        { __bridge: "pushCreds", employeeId, employeeName },
+        "*"
+      );
+    } catch (_) {}
+  }
+
+  // iframe이 로드되면 바로 푸시
+  window.addEventListener("load", () => {
+    const iframe = document.querySelector("iframe");
+    if (iframe && iframe.contentWindow) pushCreds(iframe.contentWindow);
+  });
+
+  // 자식이 “creds 필요”라고 보내오면 다시 푸시
+  window.addEventListener("message", (e) => {
+    if (e && e.data && e.data.__bridge === "needCreds") {
+      pushCreds(e.source);
+    }
+  });
+</script>
+
 </head>
 <body>
   <div class="wrap">
