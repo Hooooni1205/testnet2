@@ -19,8 +19,9 @@
     iframe{width:100%;height:100%;border:0;display:none}
   </style>
 
-  <!-- ★ 부모가 localStorage를 대행하고, 자식과 핸드셰이크로 자격 전달 -->
+  <!-- 부모: localStorage 대행 + 핸드셰이크 구현 -->
   <script>
+    // 1) 자식 요청(req)에 응답
     window.addEventListener("message", (e)=>{
       const d = e.data || {};
       if (d && d.__bridge === "req") {
@@ -34,7 +35,7 @@
       }
     });
 
-    // 2) 부모 → 자식: 자격 푸시
+    // 2) 부모 → 자식: 자격 push
     function pushCreds(targetWindow){
       try{
         const employeeId   = localStorage.getItem("employeeId");
@@ -46,7 +47,7 @@
       }catch(_){}
     }
 
-    // 3) 핸드셰이크(재전송) — 자식이 받을 때까지 600ms 간격으로 최대 20회
+    // 3) 핸드셰이크(재전송) — 자식이 받을 때까지 600ms 간격 최대 20회
     let hsTimer=null, hsTries=0;
     function startHandshake(targetWindow){
       stopHandshake();
@@ -59,15 +60,15 @@
     }
     function stopHandshake(){ if(hsTimer){ clearInterval(hsTimer); hsTimer=null; } }
 
-    // 4) 자식이 needCreds/credsAck 보냄 → 처리
+    // 4) 자식 메시지 처리
     window.addEventListener("message", (e) => {
       const d = e.data || {};
       if (d && d.__bridge === "needCreds") {
         pushCreds(e.source);
-        startHandshake(e.source);          // 혹시 못 받으면 반복 전송
+        startHandshake(e.source);
       }
       if (d && d.__bridge === "credsAck") {
-        stopHandshake();                    // 수신 확인되면 중단
+        stopHandshake();
       }
     });
   </script>
@@ -83,7 +84,7 @@
 
   <script>
     /* ★ Apps Script 웹앱 배포 URL로 바꾸세요 */
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRKMrPTKC2uK-Sb1D22nNIsUBSFWFpTJDtNrFhnIDY34bANfnj4Dg2sqj24OXcR4-mUw/exec";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz2YnuXIpDO57JrqKmqCV0iwx9oHtSc6usRdDRDOrVM9hhGnB3vu_PXrU3YB4Chc1BHVw/exec";
 
     (function mount(){
       const stage = document.getElementById("stage");
@@ -94,7 +95,7 @@
       iframe.onload = () => {
         document.getElementById("loading").style.display = "none";
         iframe.style.display = "block";
-        // onload 후에도 혹시 자식이 리스너 준비 전일 수 있으니 핸드셰이크 시작
+        // onload 후 자식이 리스너 준비 전일 수 있으니 핸드셰이크 시작
         startHandshake(iframe.contentWindow);
       };
       stage.appendChild(iframe);
