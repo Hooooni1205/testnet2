@@ -11,7 +11,6 @@
     .wrap{height:100%;display:grid;place-items:center}
     .stage{width:100%;height:100vh;display:grid}
     @supports(height:100svh){.stage{height:100svh}}
-
     .loader{width:54px;height:54px;border-radius:50%;
       border:5px solid rgba(255,255,255,.15);border-top-color:var(--accent);
       animation:spin 1s linear infinite;margin:28px auto 12px}
@@ -20,48 +19,59 @@
     iframe{width:100%;height:100%;border:0;display:none}
   </style>
 
-  <!-- ★★★ iOS용 Storage Bridge: 자식(앱스스크립트) 요청을 부모가 대신 localStorage에 저장/읽기 ★★★ -->
+  <!-- ★ 부모가 localStorage를 대행하고, 자식과 핸드셰이크로 자격 전달 -->
   <script>
-  // 기존: 자식 요청(req)에 응답하는 리스너
-  window.addEventListener("message", (e) => {
-    const d = e.data || {};
-    if (d && d.__bridge === "req") {
-      let value = null;
-      try {
-        if (d.op === "get")    value = localStorage.getItem(d.key);
-        if (d.op === "set")    localStorage.setItem(d.key, d.value);
-        if (d.op === "remove") localStorage.removeItem(d.key);
-      } catch (_) {}
-      e.source && e.source.postMessage({ __bridge: "ok", id: d.id, value }, "*");
+    // 1) 자식의 get/set/remove 요청 처리
+    window.addEventListener("message", (e) => {
+      const d = e.data || {};
+      if (d && d.__bridge === "req") {
+        let value = null;
+        try {
+          if (d.op === "get")    value = localStorage.getItem(d.key);
+          if (d.op === "set")    localStorage.setItem(d.key, d.value);
+          if (d.op === "remove") localStorage.removeItem(d.key);
+        } catch (_) {}
+        e.source && e.source.postMessage({ __bridge: "ok", id: d.id, value }, "*");
+      }
+    });
+
+    // 2) 부모 → 자식: 자격 푸시
+    function pushCreds(targetWindow){
+      try{
+        const employeeId   = localStorage.getItem("employeeId");
+        const employeeName = localStorage.getItem("employeeName");
+        targetWindow && targetWindow.postMessage(
+          { __bridge:"pushCreds", employeeId, employeeName },
+          "*"
+        );
+      }catch(_){}
     }
-  });
 
-  // ★ 추가: 부모가 먼저 자격을 푸시
-  function pushCreds(targetWindow) {
-    try {
-      const employeeId   = localStorage.getItem("employeeId");
-      const employeeName = localStorage.getItem("employeeName");
-      targetWindow && targetWindow.postMessage(
-        { __bridge: "pushCreds", employeeId, employeeName },
-        "*"
-      );
-    } catch (_) {}
-  }
-
-  // iframe이 로드되면 바로 푸시
-  window.addEventListener("load", () => {
-    const iframe = document.querySelector("iframe");
-    if (iframe && iframe.contentWindow) pushCreds(iframe.contentWindow);
-  });
-
-  // 자식이 “creds 필요”라고 보내오면 다시 푸시
-  window.addEventListener("message", (e) => {
-    if (e && e.data && e.data.__bridge === "needCreds") {
-      pushCreds(e.source);
+    // 3) 핸드셰이크(재전송) — 자식이 받을 때까지 600ms 간격으로 최대 20회
+    let hsTimer=null, hsTries=0;
+    function startHandshake(targetWindow){
+      stopHandshake();
+      hsTries=0;
+      hsTimer = setInterval(() => {
+        hsTries++;
+        pushCreds(targetWindow);
+        if (hsTries >= 20) stopHandshake();
+      }, 600);
     }
-  });
-</script>
+    function stopHandshake(){ if(hsTimer){ clearInterval(hsTimer); hsTimer=null; } }
 
+    // 4) 자식이 needCreds/credsAck 보냄 → 처리
+    window.addEventListener("message", (e) => {
+      const d = e.data || {};
+      if (d && d.__bridge === "needCreds") {
+        pushCreds(e.source);
+        startHandshake(e.source);          // 혹시 못 받으면 반복 전송
+      }
+      if (d && d.__bridge === "credsAck") {
+        stopHandshake();                    // 수신 확인되면 중단
+      }
+    });
+  </script>
 </head>
 <body>
   <div class="wrap">
@@ -73,8 +83,8 @@
   </div>
 
   <script>
-    // ★ 여기를 당신의 "재고관리 Apps Script 웹앱 배포 URL(…/exec)" 로 바꾸세요.
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNms51g1VPGU4p3YkYC2keMFl24CBsPEaDcXaaP7IROxRJ3AV5YwqGlzXfQ4mH6MH2rg/exec";
+    /* ★ Apps Script 웹앱 배포 URL로 바꾸세요 */
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyJH-JnPB-kGiytXaxM3qmKf32KylVkSz-Rfcioy9L7cVCA80gkzrrQdGai2ZQ4jsTzrQ/exec";
 
     (function mount(){
       const stage = document.getElementById("stage");
@@ -85,6 +95,8 @@
       iframe.onload = () => {
         document.getElementById("loading").style.display = "none";
         iframe.style.display = "block";
+        // onload 후에도 혹시 자식이 리스너 준비 전일 수 있으니 핸드셰이크 시작
+        startHandshake(iframe.contentWindow);
       };
       stage.appendChild(iframe);
     })();
